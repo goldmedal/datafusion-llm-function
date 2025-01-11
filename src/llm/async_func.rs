@@ -1,4 +1,4 @@
-use crate::llm::functions::AsyncUDF;
+use crate::llm::functions::AsyncScalarUDF;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::{internal_err, not_impl_err, Result};
@@ -33,7 +33,10 @@ impl AsyncFuncExpr {
 
     /// return if this is an async function
     pub fn is_async_func(func: &ScalarUDF) -> bool {
-        func.inner().as_any().downcast_ref::<AsyncUDF>().is_some()
+        func.inner()
+            .as_any()
+            .downcast_ref::<AsyncScalarUDF>()
+            .is_some()
     }
 
     /// return the name of the output column
@@ -65,7 +68,7 @@ impl AsyncFuncExpr {
             .fun()
             .inner()
             .as_any()
-            .downcast_ref::<AsyncUDF>()
+            .downcast_ref::<AsyncScalarUDF>()
         else {
             return not_impl_err!(
                 "Don't know how to evaluate async function: {:?}",

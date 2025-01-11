@@ -15,7 +15,7 @@ use std::sync::Arc;
 ///
 /// The name is chosen to  mirror ScalarUDFImpl
 #[async_trait]
-pub trait AsyncUDFImpl: Debug + Send + Sync {
+pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
     /// the function cast as any
     fn as_any(&self) -> &dyn Any;
 
@@ -41,12 +41,12 @@ pub trait AsyncUDFImpl: Debug + Send + Sync {
 /// should not be invoked by DataFusion. It's only used to generate the logical
 /// plan and unparsed them to SQL.
 #[derive(Debug)]
-pub struct AsyncUDF {
-    inner: Arc<dyn AsyncUDFImpl>,
+pub struct AsyncScalarUDF {
+    inner: Arc<dyn AsyncScalarUDFImpl>,
 }
 
-impl AsyncUDF {
-    pub fn new(inner: Arc<dyn AsyncUDFImpl>) -> Self {
+impl AsyncScalarUDF {
+    pub fn new(inner: Arc<dyn AsyncScalarUDFImpl>) -> Self {
         Self { inner }
     }
 
@@ -62,7 +62,7 @@ impl AsyncUDF {
     }
 }
 
-impl ScalarUDFImpl for AsyncUDF {
+impl ScalarUDFImpl for AsyncScalarUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

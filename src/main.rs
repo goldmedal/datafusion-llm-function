@@ -1,4 +1,4 @@
-use crate::llm::functions::{AsyncUDF, AsyncUDFImpl};
+use crate::llm::functions::{AsyncScalarUDF, AsyncScalarUDFImpl};
 use crate::llm::physical_optimizer::AsyncFuncRule;
 use async_trait::async_trait;
 use datafusion::arrow::array::{ArrayRef, AsArray, BooleanArray, RecordBatch};
@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
         .build();
 
     let llm_bool = LLMBool::new();
-    let udf = AsyncUDF::new(Arc::new(llm_bool));
+    let udf = AsyncScalarUDF::new(Arc::new(llm_bool));
     state.register_udf(udf.into_scalar_udf())?;
     state.register_udaf(max_udaf())?;
     let ctx = SessionContext::new_with_state(state);
@@ -71,7 +71,7 @@ impl LLMBool {
 }
 
 #[async_trait]
-impl AsyncUDFImpl for LLMBool {
+impl AsyncScalarUDFImpl for LLMBool {
     fn as_any(&self) -> &dyn Any {
         self
     }
