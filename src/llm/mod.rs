@@ -1,4 +1,4 @@
+mod async_func;
+pub mod exec;
 pub mod functions;
-pub mod logical;
-pub mod physical_planner;
-pub mod plan;
+pub mod physical_optimizer;
