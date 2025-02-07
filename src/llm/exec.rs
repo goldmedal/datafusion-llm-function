@@ -151,8 +151,8 @@ impl ExecutionPlan for AsyncFuncExec {
                 // append the result of evaluating the async expressions to the output
                 let mut output_arrays = batch.columns().to_vec();
                 for async_expr in async_exprs_captured.iter() {
-                    let output_array = async_expr.invoke_async(&batch).await?;
-                    output_arrays.push(output_array);
+                    let output = async_expr.invoke_with_args(&batch).await?;
+                    output_arrays.push(output.to_array(batch.num_rows())?);
                 }
                 let batch = RecordBatch::try_new(schema_captured, output_arrays)?;
                 Ok(batch)

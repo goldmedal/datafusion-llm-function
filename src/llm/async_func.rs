@@ -1,8 +1,8 @@
 use crate::llm::functions::AsyncScalarUDF;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
-use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::common::{internal_err, not_impl_err, Result};
-use datafusion::logical_expr::ScalarUDF;
+use datafusion::logical_expr::{ColumnarValue, ScalarUDF};
 use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use std::fmt::Display;
 use std::sync::Arc;
@@ -56,14 +56,13 @@ impl AsyncFuncExpr {
     /// This (async) function is called for each record batch to evaluate the LLM expressions
     ///
     /// The output is the output of evaluating the llm expression and the input record batch
-    pub async fn invoke_async(&self, batch: &RecordBatch) -> Result<ArrayRef> {
+    pub async fn invoke_batch(&self, batch: &RecordBatch) -> Result<ArrayRef> {
         let Some(llm_function) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() else {
             return internal_err!(
                 "unexpected function type, expected ScalarFunctionExpr, got: {:?}",
                 self.func
             );
         };
-
         let Some(async_udf) = llm_function
             .fun()
             .inner()
@@ -78,10 +77,50 @@ impl AsyncFuncExpr {
 
         async_udf.invoke_async(batch).await
     }
+
+    pub async fn invoke_with_args(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        let Some(llm_function) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() else {
+            return internal_err!(
+                "unexpected function type, expected ScalarFunctionExpr, got: {:?}",
+                self.func
+            );
+        };
+
+        let args = llm_function
+            .args()
+            .iter()
+            .map(|e| e.evaluate(batch))
+            .collect::<Result<Vec<_>>>()?;
+        let Some(async_udf) = llm_function
+            .fun()
+            .inner()
+            .as_any()
+            .downcast_ref::<AsyncScalarUDF>()
+        else {
+            return not_impl_err!(
+                "Don't know how to evaluate async function: {:?}",
+                llm_function
+            );
+        };
+
+        async_udf
+            .invoke_async_with_args(AsyncScalarFunctionArgs {
+                args: args.to_vec(),
+                number_rows: batch.num_rows(),
+                schema: batch.schema(),
+            })
+            .await
+    }
 }
 
 impl PartialEq<Arc<dyn PhysicalExpr>> for AsyncFuncExpr {
     fn eq(&self, other: &Arc<dyn PhysicalExpr>) -> bool {
         &self.func == other
     }
+}
+
+pub struct AsyncScalarFunctionArgs {
+    pub args: Vec<ColumnarValue>,
+    pub number_rows: usize,
+    pub schema: SchemaRef,
 }
