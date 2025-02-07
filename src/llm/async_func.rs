@@ -54,6 +54,18 @@ impl AsyncFuncExpr {
         )
     }
 
+    pub fn ideal_batch_size(&self) -> Result<Option<usize>> {
+        if let Some(expr) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() {
+            if let Some(udf) = expr.fun().inner().as_any().downcast_ref::<AsyncScalarUDF>() {
+                return Ok(udf.ideal_batch_size());
+            }
+        }
+        not_impl_err!(
+            "Can't get ideal_batch_size from {:?}",
+            self.func
+        )
+    }
+
     /// This (async) function is called for each record batch to evaluate the LLM expressions
     ///
     /// The output is the output of evaluating the llm expression and the input record batch

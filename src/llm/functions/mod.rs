@@ -35,6 +35,12 @@ pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
     /// The return type of the function
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType>;
 
+    /// The ideal batch size for this function
+    /// If there are multiple async functions in a plan, the batch size will be the max of all of them
+    fn ideal_batch_size(&self) -> Option<usize> {
+        None
+    }
+
     /// Invoke the function asynchronously with the async arguments
     async fn invoke_async(&self, args: &RecordBatch) -> Result<ArrayRef>;
 
@@ -61,6 +67,10 @@ pub struct AsyncScalarUDF {
 impl AsyncScalarUDF {
     pub fn new(inner: Arc<dyn AsyncScalarUDFImpl>) -> Self {
         Self { inner }
+    }
+
+    pub fn ideal_batch_size(&self) -> Option<usize> {
+        self.inner.ideal_batch_size()
     }
 
     /// Turn this AsyncUDF into a ScalarUDF, suitable for
