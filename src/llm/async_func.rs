@@ -2,6 +2,7 @@ use crate::llm::functions::AsyncScalarUDF;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::common::{internal_err, not_impl_err, Result};
+use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDF};
 use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use std::fmt::Display;
@@ -78,7 +79,11 @@ impl AsyncFuncExpr {
         async_udf.invoke_async(batch).await
     }
 
-    pub async fn invoke_with_args(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+    pub async fn invoke_with_args(
+        &self,
+        batch: &RecordBatch,
+        option: &ConfigOptions,
+    ) -> Result<ColumnarValue> {
         let Some(llm_function) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() else {
             return internal_err!(
                 "unexpected function type, expected ScalarFunctionExpr, got: {:?}",
@@ -104,11 +109,14 @@ impl AsyncFuncExpr {
         };
 
         async_udf
-            .invoke_async_with_args(AsyncScalarFunctionArgs {
-                args: args.to_vec(),
-                number_rows: batch.num_rows(),
-                schema: batch.schema(),
-            })
+            .invoke_async_with_args(
+                AsyncScalarFunctionArgs {
+                    args: args.to_vec(),
+                    number_rows: batch.num_rows(),
+                    schema: batch.schema(),
+                },
+                option,
+            )
             .await
     }
 }

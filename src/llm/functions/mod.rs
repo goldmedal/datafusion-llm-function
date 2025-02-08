@@ -1,9 +1,13 @@
+pub mod config;
+pub mod llm_bool;
+
 use crate::llm::async_func::AsyncScalarFunctionArgs;
 use async_trait::async_trait;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::internal_err;
 use datafusion::common::Result;
+use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
 };
@@ -34,7 +38,11 @@ pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
     /// Invoke the function asynchronously with the async arguments
     async fn invoke_async(&self, args: &RecordBatch) -> Result<ArrayRef>;
 
-    async fn invoke_async_with_args(&self, args: AsyncScalarFunctionArgs) -> Result<ColumnarValue>;
+    async fn invoke_async_with_args(
+        &self,
+        args: AsyncScalarFunctionArgs,
+        option: &ConfigOptions,
+    ) -> Result<ColumnarValue>;
 }
 
 /// A scalar UDF that must be invoked using async methods
@@ -70,8 +78,9 @@ impl AsyncScalarUDF {
     pub async fn invoke_async_with_args(
         &self,
         args: AsyncScalarFunctionArgs,
+        option: &ConfigOptions,
     ) -> Result<ColumnarValue> {
-        self.inner.invoke_async_with_args(args).await
+        self.inner.invoke_async_with_args(args, option).await
     }
 }
 
