@@ -1,9 +1,16 @@
+pub mod config;
+pub mod llm_bool;
+
+use crate::llm::async_func::AsyncScalarFunctionArgs;
 use async_trait::async_trait;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::internal_err;
 use datafusion::common::Result;
-use datafusion::logical_expr::{ColumnarValue, ScalarUDF, ScalarUDFImpl, Signature};
+use datafusion::config::ConfigOptions;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -30,6 +37,12 @@ pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
 
     /// Invoke the function asynchronously with the async arguments
     async fn invoke_async(&self, args: &RecordBatch) -> Result<ArrayRef>;
+
+    async fn invoke_async_with_args(
+        &self,
+        args: AsyncScalarFunctionArgs,
+        option: &ConfigOptions,
+    ) -> Result<ColumnarValue>;
 }
 
 /// A scalar UDF that must be invoked using async methods
@@ -56,9 +69,18 @@ impl AsyncScalarUDF {
         Arc::new(ScalarUDF::new_from_impl(self))
     }
 
+    /// Invoke the function asynchronously with the record batch
+    pub async fn invoke_async(&self, batch: &RecordBatch) -> Result<ArrayRef> {
+        self.inner.invoke_async(batch).await
+    }
+
     /// Invoke the function asynchronously with the async arguments
-    pub async fn invoke_async(&self, args: &RecordBatch) -> Result<ArrayRef> {
-        self.inner.invoke_async(args).await
+    pub async fn invoke_async_with_args(
+        &self,
+        args: AsyncScalarFunctionArgs,
+        option: &ConfigOptions,
+    ) -> Result<ColumnarValue> {
+        self.inner.invoke_async_with_args(args, option).await
     }
 }
 
