@@ -1,5 +1,7 @@
 use crate::llm::functions::AsyncScalarUDF;
-use datafusion::arrow::array::{ArrayRef, RecordBatch};
+use datafusion::arrow::array::{
+    make_array, Array, ArrayRef, MutableArrayData, RecordBatch,
+};
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::common::{internal_err, not_impl_err, Result};
 use datafusion::config::ConfigOptions;
@@ -54,16 +56,14 @@ impl AsyncFuncExpr {
         )
     }
 
+    /// Return the ideal batch size for this function
     pub fn ideal_batch_size(&self) -> Result<Option<usize>> {
         if let Some(expr) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() {
             if let Some(udf) = expr.fun().inner().as_any().downcast_ref::<AsyncScalarUDF>() {
                 return Ok(udf.ideal_batch_size());
             }
         }
-        not_impl_err!(
-            "Can't get ideal_batch_size from {:?}",
-            self.func
-        )
+        not_impl_err!("Can't get ideal_batch_size from {:?}", self.func)
     }
 
     /// This (async) function is called for each record batch to evaluate the LLM expressions
@@ -103,11 +103,6 @@ impl AsyncFuncExpr {
             );
         };
 
-        let args = llm_function
-            .args()
-            .iter()
-            .map(|e| e.evaluate(batch))
-            .collect::<Result<Vec<_>>>()?;
         let Some(async_udf) = llm_function
             .fun()
             .inner()
@@ -120,16 +115,63 @@ impl AsyncFuncExpr {
             );
         };
 
-        async_udf
-            .invoke_async_with_args(
-                AsyncScalarFunctionArgs {
-                    args: args.to_vec(),
-                    number_rows: batch.num_rows(),
-                    schema: batch.schema(),
-                },
-                option,
-            )
-            .await
+        let mut result_batches = vec![];
+        if let Some(ideal_batch_size) = self.ideal_batch_size()? {
+            let mut remainder = batch.clone();
+            while remainder.num_rows() > 0 {
+                let current_batch = remainder.slice(0, ideal_batch_size); // get next 10 rows
+                remainder =
+                    remainder.slice(ideal_batch_size, remainder.num_rows() - ideal_batch_size);
+                let args = llm_function
+                    .args()
+                    .iter()
+                    .map(|e| e.evaluate(&current_batch))
+                    .collect::<Result<Vec<_>>>()?;
+                result_batches.push(
+                    async_udf
+                        .invoke_async_with_args(
+                            AsyncScalarFunctionArgs {
+                                args: args.to_vec(),
+                                number_rows: current_batch.num_rows(),
+                                schema: current_batch.schema(),
+                            },
+                            option,
+                        )
+                        .await?,
+                );
+            }
+        } else {
+            let args = llm_function
+                .args()
+                .iter()
+                .map(|e| e.evaluate(batch))
+                .collect::<Result<Vec<_>>>()?;
+
+            result_batches.push(
+                async_udf
+                    .invoke_async_with_args(
+                        AsyncScalarFunctionArgs {
+                            args: args.to_vec(),
+                            number_rows: batch.num_rows(),
+                            schema: batch.schema(),
+                        },
+                        option,
+                    )
+                    .await?,
+            );
+        }
+
+        let datas = result_batches
+            .iter()
+            .map(|b| b.to_data())
+            .collect::<Vec<_>>();
+        let total_len = datas.iter().map(|d| d.len()).sum();
+        let mut mutable = MutableArrayData::new(datas.iter().collect(), false, total_len);
+        datas.iter().enumerate().for_each(|(i, data)| {
+            mutable.extend(i, 0, data.len());
+        });
+        let array_ref = make_array(mutable.freeze());
+        Ok(ColumnarValue::Array(array_ref))
     }
 }
 

@@ -9,7 +9,6 @@ use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
-use datafusion::error::DataFusionError;
 
 #[derive(Debug)]
 pub struct AsyncFuncRule {}
@@ -25,19 +24,12 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
     /// Rewrite to
     ///   ProjectionExec(["A", "B", "__async_fn_1" + 1]) <-- note here that the async function is not evaluated and instead is a new column
     ///     AsyncFunctionNode(["A", "B", llm_func('foo', "C")])
+    ///       CoalesceBatchesExec(target_batch_size=8124)
     ///
-    /// If the async function has an ideal batch size, coalesce the batches to that size. For example, if the ideal batch size is 64:
-    /// ```
-    ///   ProjectionExec(["A", "B", "__async_fn_1" + 1])
-    ///     AsyncFunctionNode(["A", "B", llm_func('foo', "C")])
-    ///       CoalesceBatchesExec(target_batch_size=64)
-    /// ```
-    ///
-    /// If there are multiple async functions, the batch size will be the max of all of them.
     fn optimize(
         &self,
         plan: Arc<dyn ExecutionPlan>,
-        _config: &ConfigOptions,
+        config: &ConfigOptions,
     ) -> datafusion::common::Result<Arc<dyn ExecutionPlan>> {
         // replace ProjectionExec with async exec there are any async functions
         // TODO: handle other types of ExecutionPlans (like Filter)
@@ -68,27 +60,10 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
             })
             .collect::<Vec<_>>();
 
-        let max_ideal_size = async_map
-            .async_exprs
-            .iter()
-            .map(|expr| expr.ideal_batch_size())
-            .collect::<Result<Vec<_>, DataFusionError>>()?
-            .into_iter()
-            .flatten()
-            .max();
-
-        // If any of the async functions have an ideal batch size, coalesce the batches
-        let async_exec = if max_ideal_size.is_some() {
-            let new_ideal_size = max_ideal_size.unwrap();
-            let coal_batch =
-                CoalesceBatchesExec::new(Arc::clone(proj_exec.input()), new_ideal_size);
-            AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch))
-        } else {
-            AsyncFuncExec::new(async_map.async_exprs, Arc::clone(proj_exec.input()))
-        };
-
+        let coal_batch =
+            CoalesceBatchesExec::new(Arc::clone(proj_exec.input()), config.execution.batch_size);
+        let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch));
         let new_proj_exec = ProjectionExec::try_new(new_exprs, Arc::new(async_exec))?;
-
         Ok(Arc::new(new_proj_exec) as _)
     }
 

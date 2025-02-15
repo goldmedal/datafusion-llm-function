@@ -14,7 +14,6 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
-use std::env;
 use std::sync::Arc;
 
 /// This is a simple example of a UDF that takes a string, invokes a (remote) LLM function
@@ -53,6 +52,10 @@ impl AsyncScalarUDFImpl for LLMBool {
         Ok(DataType::Boolean)
     }
 
+    fn ideal_batch_size(&self) -> Option<usize> {
+        Some(2)
+    }
+
     async fn invoke_async(&self, _args: &RecordBatch) -> datafusion::common::Result<ArrayRef> {
         not_impl_err!("This function should not be called")
     }
@@ -61,7 +64,7 @@ impl AsyncScalarUDFImpl for LLMBool {
         &self,
         args: AsyncScalarFunctionArgs,
         option: &ConfigOptions,
-    ) -> datafusion::common::Result<ColumnarValue> {
+    ) -> datafusion::common::Result<ArrayRef> {
         let ColumnarValue::Scalar(question) = &args.args[0] else {
             return plan_err!("Expected a scalar argument");
         };
@@ -111,8 +114,7 @@ Evaluate each row based on the following question and return only the boolean re
             );
         }
         let array_ref = Arc::new(BooleanArray::from(result));
-        let columnar_value = ColumnarValue::Array(array_ref);
-        Ok(columnar_value)
+        Ok(array_ref)
     }
 }
 
@@ -288,7 +290,7 @@ mod bool_from_int {
                         serde_json::Value::String(s) => Ok(s == "true"),
                         serde_json::Value::Number(n) if n.is_u64() => Ok(n.as_u64().unwrap() != 0),
                         _ => {
-                            return Err(serde::de::Error::custom(format!(
+                            Err(serde::de::Error::custom(format!(
                                 "invalid type for boolean {}",
                                 v
                             )))
