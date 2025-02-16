@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
         .await?
         .show()
         .await?;
-    ctx.sql("insert into country values  ('french', 'europe'), ('japan', 'south america')")
+    ctx.sql("insert into country values  ('french', 'europe'), ('japan', 'japan')")
         .await?
         .show()
         .await?;
@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
         .await?;
 
     match ctx
-        .sql("select async_upper(name) from country c")
+        .sql("select * from country c where async_upper(name) = async_upper(region)")
         .await?
         .show()
         .await

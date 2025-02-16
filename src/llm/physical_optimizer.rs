@@ -1,11 +1,13 @@
 use crate::llm::async_func::AsyncFuncExpr;
 use crate::llm::exec::AsyncFuncExec;
-use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+use datafusion::common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
+use datafusion::common::Result;
 use datafusion::config::ConfigOptions;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
+use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
@@ -30,41 +32,22 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
         &self,
         plan: Arc<dyn ExecutionPlan>,
         config: &ConfigOptions,
-    ) -> datafusion::common::Result<Arc<dyn ExecutionPlan>> {
-        // replace ProjectionExec with async exec there are any async functions
-        // TODO: handle other types of ExecutionPlans (like Filter)
-        let Some(proj_exec) = plan.as_any().downcast_ref::<ProjectionExec>() else {
-            return Ok(plan);
-        };
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+        plan.transform(|plan| {
+            if let Some(proj_exec) = plan.as_any().downcast_ref::<ProjectionExec>() {
+                if let Some(new_proj_exec) = try_plan_project(proj_exec.clone(), config)? {
+                    return Ok(Transformed::yes(new_proj_exec));
+                };
+            };
 
-        // find any instances of async functions in the expressions
-        let num_input_columns = proj_exec.input().schema().fields().len();
-        let mut async_map = AsyncMapper::new(num_input_columns);
-        proj_exec.expr().iter().for_each(|(expr, _column_name)| {
-            async_map.find_references(expr);
-        });
-
-        if async_map.is_empty() {
-            return Ok(plan);
-        }
-
-        // rewrite the projection's expressions in terms of the columns with the result of async evaluation
-        let new_exprs = proj_exec
-            .expr()
-            .iter()
-            .map(|(expr, column_name)| {
-                let new_expr = Arc::clone(expr)
-                    .transform_up(|e| Ok(async_map.map_expr(e)))
-                    .expect("no failures as closure is infallible");
-                (new_expr.data, column_name.to_string())
-            })
-            .collect::<Vec<_>>();
-
-        let coal_batch =
-            CoalesceBatchesExec::new(Arc::clone(proj_exec.input()), config.execution.batch_size);
-        let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch));
-        let new_proj_exec = ProjectionExec::try_new(new_exprs, Arc::new(async_exec))?;
-        Ok(Arc::new(new_proj_exec) as _)
+            if let Some(filter_exec) = plan.as_any().downcast_ref::<FilterExec>() {
+                if let Some(new_filter_exec) = try_plan_filter(filter_exec.clone(), config)? {
+                    return Ok(Transformed::yes(new_filter_exec));
+                };
+            };
+            Ok(Transformed::no(plan))
+        })
+        .data()
     }
 
     fn name(&self) -> &str {
@@ -75,6 +58,66 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
     fn schema_check(&self) -> bool {
         true
     }
+}
+
+fn try_plan_project(
+    proj_exec: ProjectionExec,
+    config: &ConfigOptions,
+) -> Result<Option<Arc<dyn ExecutionPlan>>> {
+    // find any instances of async functions in the expressions
+    let num_input_columns = proj_exec.input().schema().fields().len();
+    let mut async_map = AsyncMapper::new(num_input_columns);
+    proj_exec.expr().iter().for_each(|(expr, _column_name)| {
+        async_map.find_references(expr);
+    });
+
+    if async_map.is_empty() {
+        return Ok(None);
+    }
+
+    // rewrite the projection's expressions in terms of the columns with the result of async evaluation
+    let new_exprs = proj_exec
+        .expr()
+        .iter()
+        .map(|(expr, column_name)| {
+            let new_expr = Arc::clone(expr)
+                .transform_up(|e| Ok(async_map.map_expr(e)))
+                .expect("no failures as closure is infallible");
+            (new_expr.data, column_name.to_string())
+        })
+        .collect::<Vec<_>>();
+
+    let coal_batch =
+        CoalesceBatchesExec::new(Arc::clone(proj_exec.input()), config.execution.batch_size);
+    let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch));
+    let new_proj_exec = ProjectionExec::try_new(new_exprs, Arc::new(async_exec))?;
+    Ok(Some(Arc::new(new_proj_exec) as _))
+}
+
+fn try_plan_filter(
+    filter_exec: FilterExec,
+    config: &ConfigOptions,
+) -> Result<Option<Arc<dyn ExecutionPlan>>> {
+    let num_input_columns = filter_exec.input().schema().fields().len();
+    let mut async_map = AsyncMapper::new(num_input_columns);
+    async_map.find_references(&filter_exec.predicate());
+
+    if async_map.is_empty() {
+        return Ok(None);
+    }
+
+    let new_expr = Arc::clone(filter_exec.predicate())
+        .transform(|e| Ok(async_map.map_expr(e)))?
+        .data;
+    let coal_batch =
+        CoalesceBatchesExec::new(Arc::clone(filter_exec.input()), config.execution.batch_size);
+    let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch));
+    let new_filter_exec = FilterExec::try_new(new_expr, Arc::new(async_exec))?;
+    // project the output columns excluding the async functions
+    // The async functions are always appended to the end of the schema.
+    let projected =
+        new_filter_exec.with_projection(Some((0..num_input_columns).into_iter().collect()))?;
+    Ok(Some(Arc::new(projected) as _))
 }
 
 /// Maps async_expressions to new columns
