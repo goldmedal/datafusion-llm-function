@@ -100,7 +100,7 @@ fn try_plan_filter(
 ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
     let num_input_columns = filter_exec.input().schema().fields().len();
     let mut async_map = AsyncMapper::new(num_input_columns);
-    async_map.find_references(&filter_exec.predicate());
+    async_map.find_references(filter_exec.predicate());
 
     if async_map.is_empty() {
         return Ok(None);
@@ -116,7 +116,7 @@ fn try_plan_filter(
     // project the output columns excluding the async functions
     // The async functions are always appended to the end of the schema.
     let projected =
-        new_filter_exec.with_projection(Some((0..num_input_columns).into_iter().collect()))?;
+        new_filter_exec.with_projection(Some((0..num_input_columns).collect()))?;
     Ok(Some(Arc::new(projected) as _))
 }
 

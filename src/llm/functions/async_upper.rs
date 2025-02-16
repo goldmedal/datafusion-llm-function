@@ -12,11 +12,18 @@ use datafusion::logical_expr::{
 };
 use log::trace;
 use std::any::Any;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct AsyncUpper {
     signature: Signature,
+}
+
+impl Default for AsyncUpper {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AsyncUpper {

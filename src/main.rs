@@ -1,13 +1,10 @@
 use crate::llm::functions::async_upper::AsyncUpper;
-use crate::llm::functions::config::LLMConfig;
-use crate::llm::functions::llm_bool::LLMBool;
 use crate::llm::functions::AsyncScalarUDF;
 use crate::llm::physical_optimizer::AsyncFuncRule;
 use datafusion::common::Result;
-use datafusion::config::{ConfigOptions, Extensions};
 use datafusion::execution::{FunctionRegistry, SessionStateBuilder};
 use datafusion::functions_aggregate::min_max::max_udaf;
-use datafusion::prelude::{SessionConfig, SessionContext};
+use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 
 pub mod llm;

@@ -23,6 +23,12 @@ pub struct LLMBool {
     signature: Signature,
 }
 
+impl Default for LLMBool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LLMBool {
     pub fn new() -> Self {
         Self {
