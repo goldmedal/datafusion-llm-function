@@ -124,8 +124,7 @@ impl AsyncFuncExpr {
                 };
 
                 let current_batch = remainder.slice(0, size); // get next 10 rows
-                remainder =
-                    remainder.slice(size, remainder.num_rows() - size);
+                remainder = remainder.slice(size, remainder.num_rows() - size);
                 let args = llm_function
                     .args()
                     .iter()
