@@ -48,6 +48,10 @@ impl AsyncScalarUDFImpl for AsyncUpper {
         Ok(DataType::Utf8)
     }
 
+    fn ideal_batch_size(&self) -> Option<usize> {
+        Some(10)
+    }
+
     async fn invoke_async(&self, _args: &RecordBatch) -> Result<ArrayRef> {
         unimplemented!("This function should not be called")
     }

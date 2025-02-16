@@ -117,9 +117,15 @@ impl AsyncFuncExpr {
         if let Some(ideal_batch_size) = self.ideal_batch_size()? {
             let mut remainder = batch.clone();
             while remainder.num_rows() > 0 {
-                let current_batch = remainder.slice(0, ideal_batch_size); // get next 10 rows
+                let size = if ideal_batch_size > remainder.num_rows() {
+                    remainder.num_rows()
+                } else {
+                    ideal_batch_size
+                };
+
+                let current_batch = remainder.slice(0, size); // get next 10 rows
                 remainder =
-                    remainder.slice(ideal_batch_size, remainder.num_rows() - ideal_batch_size);
+                    remainder.slice(size, remainder.num_rows() - size);
                 let args = llm_function
                     .args()
                     .iter()
