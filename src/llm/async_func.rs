@@ -1,7 +1,5 @@
 use crate::llm::functions::AsyncScalarUDF;
-use datafusion::arrow::array::{
-    make_array, Array, ArrayRef, MutableArrayData, RecordBatch,
-};
+use datafusion::arrow::array::{make_array, Array, ArrayRef, MutableArrayData, RecordBatch};
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::common::{internal_err, not_impl_err, Result};
 use datafusion::config::ConfigOptions;
@@ -181,6 +179,7 @@ impl PartialEq<Arc<dyn PhysicalExpr>> for AsyncFuncExpr {
     }
 }
 
+#[derive(Debug)]
 pub struct AsyncScalarFunctionArgs {
     pub args: Vec<ColumnarValue>,
     pub number_rows: usize,
