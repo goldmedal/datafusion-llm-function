@@ -1,15 +1,12 @@
 use crate::llm::functions::config::LLMConfig;
 use crate::llm::functions::llm_bool::LLMBool;
-use crate::llm::functions::{AsyncScalarUDF, AsyncScalarUDFImpl};
+use crate::llm::functions::{AsyncScalarUDF};
 use crate::llm::physical_optimizer::AsyncFuncRule;
-use datafusion::arrow::array::AsArray;
 use datafusion::common::Result;
 use datafusion::config::{ConfigOptions, Extensions};
 use datafusion::execution::{FunctionRegistry, SessionStateBuilder};
 use datafusion::functions_aggregate::min_max::max_udaf;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::sync::Arc;
 
 mod llm;
@@ -57,10 +54,17 @@ async fn main() -> Result<()> {
     ctx.sql("explain select llm_bool('Does {name} locates at {region}?', c.name, c.region) from country c")
         .await?.show().await?;
 
-    ctx.sql("select llm_bool('Does {name} locate at {region}?', c.name, c.region) from country c")
+    match ctx
+        .sql("select llm_bool('Does {name} locate at {region}?', c.name, c.region) from country c")
         .await?
         .show()
-        .await?;
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("Error: {}", e);
+        }
+    }
 
     Ok(())
 }

@@ -9,7 +9,7 @@ use datafusion::common::internal_err;
 use datafusion::common::Result;
 use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    ColumnarValue, ScalarUDF, ScalarUDFImpl, Signature,
 };
 use std::any::Any;
 use std::fmt::Debug;
@@ -35,6 +35,11 @@ pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
     /// The return type of the function
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType>;
 
+    /// The ideal batch size for this function.
+    fn ideal_batch_size(&self) -> Option<usize> {
+        None
+    }
+
     /// Invoke the function asynchronously with the async arguments
     async fn invoke_async(&self, args: &RecordBatch) -> Result<ArrayRef>;
 
@@ -42,7 +47,7 @@ pub trait AsyncScalarUDFImpl: Debug + Send + Sync {
         &self,
         args: AsyncScalarFunctionArgs,
         option: &ConfigOptions,
-    ) -> Result<ColumnarValue>;
+    ) -> Result<ArrayRef>;
 }
 
 /// A scalar UDF that must be invoked using async methods
@@ -63,6 +68,11 @@ impl AsyncScalarUDF {
         Self { inner }
     }
 
+    /// The ideal batch size for this function
+    pub fn ideal_batch_size(&self) -> Option<usize> {
+        self.inner.ideal_batch_size()
+    }
+
     /// Turn this AsyncUDF into a ScalarUDF, suitable for
     /// registering in the context
     pub fn into_scalar_udf(self) -> Arc<ScalarUDF> {
@@ -79,7 +89,7 @@ impl AsyncScalarUDF {
         &self,
         args: AsyncScalarFunctionArgs,
         option: &ConfigOptions,
-    ) -> Result<ColumnarValue> {
+    ) -> Result<ArrayRef> {
         self.inner.invoke_async_with_args(args, option).await
     }
 }

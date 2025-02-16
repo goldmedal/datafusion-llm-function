@@ -5,6 +5,7 @@ use datafusion::config::ConfigOptions;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
+use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
@@ -23,11 +24,12 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
     /// Rewrite to
     ///   ProjectionExec(["A", "B", "__async_fn_1" + 1]) <-- note here that the async function is not evaluated and instead is a new column
     ///     AsyncFunctionNode(["A", "B", llm_func('foo', "C")])
+    ///       CoalesceBatchesExec(target_batch_size=8124)
     ///
     fn optimize(
         &self,
         plan: Arc<dyn ExecutionPlan>,
-        _config: &ConfigOptions,
+        config: &ConfigOptions,
     ) -> datafusion::common::Result<Arc<dyn ExecutionPlan>> {
         // replace ProjectionExec with async exec there are any async functions
         // TODO: handle other types of ExecutionPlans (like Filter)
@@ -58,10 +60,10 @@ impl PhysicalOptimizerRule for AsyncFuncRule {
             })
             .collect::<Vec<_>>();
 
-        let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::clone(proj_exec.input()));
-
+        let coal_batch =
+            CoalesceBatchesExec::new(Arc::clone(proj_exec.input()), config.execution.batch_size);
+        let async_exec = AsyncFuncExec::new(async_map.async_exprs, Arc::new(coal_batch));
         let new_proj_exec = ProjectionExec::try_new(new_exprs, Arc::new(async_exec))?;
-
         Ok(Arc::new(new_proj_exec) as _)
     }
 
