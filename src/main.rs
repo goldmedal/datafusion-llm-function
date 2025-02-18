@@ -1,36 +1,23 @@
-use crate::llm::functions::config::LLMConfig;
-use crate::llm::functions::llm_bool::LLMBool;
-use crate::llm::functions::{AsyncScalarUDF};
+use crate::llm::functions::async_upper::AsyncUpper;
+use crate::llm::functions::AsyncScalarUDF;
 use crate::llm::physical_optimizer::AsyncFuncRule;
 use datafusion::common::Result;
-use datafusion::config::{ConfigOptions, Extensions};
 use datafusion::execution::{FunctionRegistry, SessionStateBuilder};
 use datafusion::functions_aggregate::min_max::max_udaf;
-use datafusion::prelude::{SessionConfig, SessionContext};
+use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 
-mod llm;
+pub mod llm;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let mut extensions = Extensions::new();
-    extensions.insert(LLMConfig::default());
-
-    let mut config = ConfigOptions::new().with_extensions(extensions);
-    config.set("llm.model", "llama3.2:3b")?;
-    config.set("llm.api_key", "")?;
-    config.set("llm.chat_endpoint", "http://localhost:11434/api/chat")?;
-
-    let session_config = SessionConfig::from(config);
-
     let mut state = SessionStateBuilder::default()
         .with_physical_optimizer_rule(Arc::new(AsyncFuncRule {}))
-        .with_config(session_config)
         .build();
 
-    let llm_bool = LLMBool::new();
-    let udf = AsyncScalarUDF::new(Arc::new(llm_bool));
+    let async_upper = AsyncUpper::new();
+    let udf = AsyncScalarUDF::new(Arc::new(async_upper));
     state.register_udf(udf.into_scalar_udf())?;
     state.register_udaf(max_udaf())?;
     let ctx = SessionContext::new_with_state(state);
@@ -46,16 +33,18 @@ async fn main() -> Result<()> {
         .await?
         .show()
         .await?;
-    ctx.sql("insert into country values  ('french', 'europe'), ('japan', 'south america')")
+    ctx.sql("insert into country values  ('french', 'europe'), ('japan', 'japan')")
         .await?
         .show()
         .await?;
 
-    ctx.sql("explain select llm_bool('Does {name} locates at {region}?', c.name, c.region) from country c")
-        .await?.show().await?;
+    ctx.sql("explain select async_upper(name) from country c")
+        .await?
+        .show()
+        .await?;
 
     match ctx
-        .sql("select llm_bool('Does {name} locate at {region}?', c.name, c.region) from country c")
+        .sql("select * from country c where async_upper(name) = async_upper(region)")
         .await?
         .show()
         .await

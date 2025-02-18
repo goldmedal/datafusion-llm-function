@@ -1,3 +1,4 @@
+pub mod async_upper;
 pub mod config;
 pub mod llm_bool;
 
@@ -8,9 +9,7 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::common::internal_err;
 use datafusion::common::Result;
 use datafusion::config::ConfigOptions;
-use datafusion::logical_expr::{
-    ColumnarValue, ScalarUDF, ScalarUDFImpl, Signature,
-};
+use datafusion::logical_expr::{ColumnarValue, ScalarUDF, ScalarUDFImpl, Signature};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;

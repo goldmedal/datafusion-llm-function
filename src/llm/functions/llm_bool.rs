@@ -23,6 +23,12 @@ pub struct LLMBool {
     signature: Signature,
 }
 
+impl Default for LLMBool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LLMBool {
     pub fn new() -> Self {
         Self {
@@ -53,7 +59,7 @@ impl AsyncScalarUDFImpl for LLMBool {
     }
 
     fn ideal_batch_size(&self) -> Option<usize> {
-        Some(2)
+        Some(6)
     }
 
     async fn invoke_async(&self, _args: &RecordBatch) -> datafusion::common::Result<ArrayRef> {
@@ -199,6 +205,7 @@ async fn ask_llm(
             .unwrap()
     } else {
         let key = format!("Bearer {}", llm_config.api_key);
+        dbg!(&key);
         let client = reqwest::Client::new();
         client
             .post(&llm_config.chat_endpoint)
@@ -289,12 +296,10 @@ mod bool_from_int {
                         serde_json::Value::Bool(b) => Ok(b),
                         serde_json::Value::String(s) => Ok(s == "true"),
                         serde_json::Value::Number(n) if n.is_u64() => Ok(n.as_u64().unwrap() != 0),
-                        _ => {
-                            Err(serde::de::Error::custom(format!(
-                                "invalid type for boolean {}",
-                                v
-                            )))
-                        }
+                        _ => Err(serde::de::Error::custom(format!(
+                            "invalid type for boolean {}",
+                            v
+                        ))),
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(result)
