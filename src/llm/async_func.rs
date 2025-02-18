@@ -66,29 +66,7 @@ impl AsyncFuncExpr {
 
     /// This (async) function is called for each record batch to evaluate the LLM expressions
     ///
-    /// The output is the output of evaluating the llm expression and the input record batch
-    pub async fn invoke_batch(&self, batch: &RecordBatch) -> Result<ArrayRef> {
-        let Some(llm_function) = self.func.as_any().downcast_ref::<ScalarFunctionExpr>() else {
-            return internal_err!(
-                "unexpected function type, expected ScalarFunctionExpr, got: {:?}",
-                self.func
-            );
-        };
-        let Some(async_udf) = llm_function
-            .fun()
-            .inner()
-            .as_any()
-            .downcast_ref::<AsyncScalarUDF>()
-        else {
-            return not_impl_err!(
-                "Don't know how to evaluate async function: {:?}",
-                llm_function
-            );
-        };
-
-        async_udf.invoke_async(batch).await
-    }
-
+    /// The output is the output of evaluating the async expression and the input record batch
     pub async fn invoke_with_args(
         &self,
         batch: &RecordBatch,

@@ -115,8 +115,7 @@ fn try_plan_filter(
     let new_filter_exec = FilterExec::try_new(new_expr, Arc::new(async_exec))?;
     // project the output columns excluding the async functions
     // The async functions are always appended to the end of the schema.
-    let projected =
-        new_filter_exec.with_projection(Some((0..num_input_columns).collect()))?;
+    let projected = new_filter_exec.with_projection(Some((0..num_input_columns).collect()))?;
     Ok(Some(Arc::new(projected) as _))
 }
 
