@@ -62,10 +62,6 @@ impl AsyncScalarUDFImpl for LLMBool {
         Some(6)
     }
 
-    async fn invoke_async(&self, _args: &RecordBatch) -> datafusion::common::Result<ArrayRef> {
-        not_impl_err!("This function should not be called")
-    }
-
     async fn invoke_async_with_args(
         &self,
         args: AsyncScalarFunctionArgs,

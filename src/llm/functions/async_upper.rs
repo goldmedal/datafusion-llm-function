@@ -59,10 +59,6 @@ impl AsyncScalarUDFImpl for AsyncUpper {
         Some(10)
     }
 
-    async fn invoke_async(&self, _args: &RecordBatch) -> Result<ArrayRef> {
-        unimplemented!("This function should not be called")
-    }
-
     async fn invoke_async_with_args(
         &self,
         args: AsyncScalarFunctionArgs,
